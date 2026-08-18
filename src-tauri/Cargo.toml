@@ -1,0 +1,17 @@
+[package]
+name = "fps-unlocker"
+version = "0.1.0"
+description = "A macOS menu bar app that unlocks the Roblox frame rate"
+authors = ["Saba"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+mach2 = "0.4"
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["libc", "NSAlert", "NSApplication", "NSButton", "NSCell", "NSControl", "NSImage", "NSMenu", "NSMenuItem", "NSResponder", "NSRunningApplication", "NSStatusBar", "NSStatusBarButton", "NSStatusItem", "NSView"] }
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSObject", "NSString"] }
+objc2-quartz-core = { version = "0.3", default-features = false, features = ["CALayer", "CAMetalLayer"] }
+tauri = { version = "2", features = [] }

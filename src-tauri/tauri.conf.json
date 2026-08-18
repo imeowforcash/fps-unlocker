@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "FPS Unlocker",
+  "version": "0.1.0",
+  "identifier": "site.alterrasoftware.fps-unlocker",
+  "app": {
+    "windows": []
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "category": "Utility",
+    "icon": ["icons/icon.icns"],
+    "macOS": {
+      "signingIdentity": "-"
+    }
+  }
+}
