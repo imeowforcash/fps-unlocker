@@ -15,7 +15,7 @@ use std::{
     collections::HashSet,
     mem::{size_of, MaybeUninit},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU32, Ordering},
         Arc, Mutex,
     },
     thread,
@@ -33,6 +33,8 @@ extern "C" {
     ) -> i32;
     static objc_debug_isa_class_mask: usize;
 }
+
+pub const MAX: u32 = 1000;
 
 const MH_MAGIC_64: u32 = 0xfeedfacf;
 const LC_SEGMENT_64: u32 = 0x19;
@@ -85,6 +87,7 @@ pub struct Run {
     process: Process,
     targets: Targets,
     saved: Saved,
+    limit: Arc<AtomicU32>,
     on: AtomicBool,
     gate: Mutex<()>,
 }
@@ -423,7 +426,7 @@ impl Process {
 }
 
 impl Run {
-    pub fn start(pid: i32) -> Result<Arc<Self>, String> {
+    pub fn start(pid: i32, limit: Arc<AtomicU32>) -> Result<Arc<Self>, String> {
         let metal = metal()?;
         let process = Process::attach(pid)?;
         let heap = process.regions();
@@ -444,6 +447,7 @@ impl Run {
             process,
             targets,
             saved,
+            limit,
             on: AtomicBool::new(true),
             gate: Mutex::new(()),
         });
@@ -475,7 +479,9 @@ impl Run {
     }
 
     fn apply(&self) -> Result<(), String> {
-        self.process.write(self.targets.interval, 1.0f64 / 1000.0)?;
+        // letting the user enter more than 1000 BUT secretely still capping at 1000 because theyre not gonna hit 1000 fps consisitently anyways and it just feels like a right number to cap at
+        let fps = self.limit.load(Ordering::Relaxed).clamp(1, MAX) as f64;
+        self.process.write(self.targets.interval, 1.0 / fps)?;
         let value = self.process.read::<u8>(self.targets.sync)?;
         let value = (value & !self.targets.bit) | (self.targets.off & self.targets.bit);
         self.process.write(self.targets.sync, value)

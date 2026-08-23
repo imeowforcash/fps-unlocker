@@ -5,30 +5,37 @@ use mach2::{
     traps::{mach_task_self, task_for_pid},
 };
 use objc2::{
-    define_class, msg_send, rc::Retained, runtime::ProtocolObject, sel, DefinedClass,
-    MainThreadMarker, MainThreadOnly,
+    define_class, msg_send, rc::Retained, runtime::ProtocolObject, sel, AllocAnyThread,
+    DefinedClass, MainThreadMarker, MainThreadOnly,
 };
 use objc2_app_kit::{
-    NSAlert, NSApplication, NSControlStateValueOff, NSControlStateValueOn, NSImage, NSMenu,
-    NSMenuDelegate, NSMenuItem, NSRunningApplication, NSStatusBar, NSStatusBarButton,
-    NSVariableStatusItemLength,
+    NSAlert, NSAlertFirstButtonReturn, NSApplication, NSControlStateValueOff,
+    NSControlStateValueOn, NSImage, NSMenu, NSMenuDelegate, NSMenuItem, NSRunningApplication,
+    NSStatusBar, NSStatusBarButton, NSTextField, NSVariableStatusItemLength,
 };
-use objc2_foundation::{NSObject, NSObjectProtocol, NSString};
+use objc2_foundation::{NSData, NSObject, NSObjectProtocol, NSPoint, NSRect, NSSize, NSString};
 use std::{
     fs,
+    path::{Path, PathBuf},
     process::Command,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc, Mutex,
+    },
     thread,
     time::Duration,
 };
-use tauri::ActivationPolicy;
+use tauri::{ActivationPolicy, AppHandle, Manager};
 
 mod mem;
 
 struct Items {
     unlock: Retained<NSMenuItem>,
     resign: Retained<NSMenuItem>,
+    cap: Retained<NSMenuItem>,
     button: Retained<NSStatusBarButton>,
+    limit: Arc<AtomicU32>,
+    path: Option<PathBuf>,
     run: Arc<Mutex<Option<Arc<mem::Run>>>>,
 }
 
@@ -51,6 +58,9 @@ impl Items {
         });
         self.resign
             .setEnabled(!on && (!signed || running && pid.is_none()));
+        self.cap.setTitle(&NSString::from_str(&label(
+            self.limit.load(Ordering::Relaxed),
+        )));
         self.button.setImage(Some(&icon(!on)));
     }
 
@@ -59,7 +69,7 @@ impl Items {
         if let Some(run) = slot.take() {
             run.stop();
         } else if let Some(pid) = ready() {
-            match mem::Run::start(pid) {
+            match mem::Run::start(pid, self.limit.clone()) {
                 Ok(run) => *slot = Some(run),
                 Err(error) => fail("Unlock failed", &error),
             }
@@ -72,6 +82,13 @@ impl Items {
         match resign() {
             Ok(()) => self.sync(),
             Err(error) => fail("Resign failed", &error),
+        }
+    }
+
+    fn cap(&self) {
+        if let Some(fps) = ask(self.limit.load(Ordering::Relaxed)) {
+            self.limit.store(fps, Ordering::Relaxed);
+            save(self.path.as_deref(), fps);
         }
     }
 }
@@ -92,6 +109,11 @@ define_class!(
         #[unsafe(method(resign:))]
         fn resign(&self, _sender: &NSMenuItem) {
             self.ivars().resign();
+        }
+
+        #[unsafe(method(cap:))]
+        fn cap(&self, _sender: &NSMenuItem) {
+            self.ivars().cap();
         }
     }
 
@@ -120,7 +142,66 @@ fn fail(title: &str, error: &str) {
     let alert = NSAlert::new(mtm);
     alert.setMessageText(&NSString::from_str(title));
     alert.setInformativeText(&NSString::from_str(error));
+    unsafe { alert.setIcon(logo().as_deref()) };
     alert.runModal();
+}
+
+// yes this is how i do it. i know theres a plugin and i DONT care.
+fn settings(handle: &AppHandle) -> Option<PathBuf> {
+    let dir = handle.path().app_data_dir().ok()?;
+    fs::create_dir_all(&dir).ok()?;
+    Some(dir.join("fps"))
+}
+
+fn load(path: Option<&Path>) -> u32 {
+    path.and_then(|path| fs::read_to_string(path).ok())
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(mem::MAX)
+        .max(1)
+}
+
+fn save(path: Option<&Path>, limit: u32) {
+    if let Some(path) = path {
+        let _ = fs::write(path, limit.to_string());
+    }
+}
+
+fn label(fps: u32) -> String {
+    format!("FPS Limit: {fps}")
+}
+
+fn logo() -> Option<Retained<NSImage>> {
+    let data = NSData::with_bytes(include_bytes!("../icons/icon.png"));
+    NSImage::initWithData(NSImage::alloc(), &data)
+}
+
+fn ask(current: u32) -> Option<u32> {
+    let mtm = MainThreadMarker::new().unwrap();
+    let app = NSApplication::sharedApplication(mtm);
+    app.activate();
+    let alert = NSAlert::new(mtm);
+    alert.setMessageText(&NSString::from_str("FPS Limit"));
+    unsafe { alert.setIcon(logo().as_deref()) };
+    alert.addButtonWithTitle(&NSString::from_str("Set"));
+    alert.addButtonWithTitle(&NSString::from_str("Cancel"));
+    let field = NSTextField::textFieldWithString(&NSString::from_str(&current.to_string()), mtm);
+    field.setFrame(NSRect::new(
+        NSPoint::new(0.0, 0.0),
+        NSSize::new(220.0, 24.0),
+    ));
+    alert.setAccessoryView(Some(&field));
+    alert.window().setInitialFirstResponder(Some(&field));
+    if alert.runModal() != NSAlertFirstButtonReturn {
+        return None;
+    }
+    // type 5000 if you want, it will proudly say 5000
+    field
+        .stringValue()
+        .to_string()
+        .trim()
+        .parse::<u32>()
+        .ok()
+        .map(|fps| fps.max(1))
 }
 
 fn icon(locked: bool) -> Retained<NSImage> {
@@ -148,7 +229,8 @@ fn add(menu: &NSMenu, title: &str) -> Retained<NSMenuItem> {
     }
 }
 
-fn tray() {
+fn tray(handle: &AppHandle) {
+    let path = settings(handle);
     let mtm = MainThreadMarker::new().unwrap();
     let bar = NSStatusBar::systemStatusBar();
     let item = bar.statusItemWithLength(NSVariableStatusItemLength);
@@ -156,6 +238,9 @@ fn tray() {
     let image = icon(true);
     let menu = NSMenu::new(mtm);
     menu.setAutoenablesItems(false);
+    let limit = Arc::new(AtomicU32::new(load(path.as_deref())));
+    let cap = add(&menu, &label(limit.load(Ordering::Relaxed)));
+    menu.addItem(&NSMenuItem::separatorItem(mtm));
     let unlock = add(&menu, "Unlock FPS");
     unlock.setEnabled(false);
     unlock.setState(NSControlStateValueOff);
@@ -177,7 +262,10 @@ fn tray() {
     let items = Items {
         unlock,
         resign,
+        cap,
         button,
+        limit,
+        path,
         run: Arc::new(Mutex::new(None)),
     };
     let host = Host::new(mtm, items);
@@ -187,6 +275,8 @@ fn tray() {
         ivars.unlock.setAction(Some(sel!(toggle:)));
         ivars.resign.setTarget(Some(&host));
         ivars.resign.setAction(Some(sel!(resign:)));
+        ivars.cap.setTarget(Some(&host));
+        ivars.cap.setAction(Some(sel!(cap:)));
     }
     menu.setDelegate(Some(ProtocolObject::from_ref(&*host)));
     // tray will be killed if this drops
@@ -280,7 +370,7 @@ fn main() {
     tauri::Builder::default()
         .setup(|app| {
             app.set_activation_policy(ActivationPolicy::Accessory);
-            tray();
+            tray(app.handle());
             Ok(())
         })
         .run(tauri::generate_context!())
