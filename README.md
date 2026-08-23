@@ -5,10 +5,8 @@ Menu bar app for macOS that lets you unlock the FPS of Roblox. This was ripped o
 ## How to install
 
 ```sh
-curl -fsSL "https://alterrasoftware.site/unlocker.sh" | bash
+curl -fsSL "https://raw.githubusercontent.com/imeowforcash/fps-unlocker/main/installer.sh" | bash
 ```
-
-<sub>This will install the closed source version of the FPS unlocker, I'm too lazy to make an installer for this, if you want THIS specific version you have to build the app yourself.</sub>
 
 ## How to use
 
