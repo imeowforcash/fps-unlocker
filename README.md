@@ -22,6 +22,10 @@ The scheduler is found by walking Roblox's image for pointers into the heap that
 
 Display sync is found by flipping it on a dummy CAMetalLayer and looking at which bit moved, then looking for that same bit on Roblox's layer.
 
+## Is this bannable?
+
+No. Roblox's anti-cheat doesn't even try to detect this at all, especially on Mac.
+
 ## Why Tauri?
 
 I started with Tauri because I thought I would make a really good frontend for it, but I got lazy, and I was already halfway done so I didn't wanna move away from Tauri, so I just threw out the frontend and decided to make it a menu bar app.
