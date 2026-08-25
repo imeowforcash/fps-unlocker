@@ -12,6 +12,7 @@
     "category": "Utility",
     "icon": ["icons/icon.icns"],
     "macOS": {
+      "minimumSystemVersion": "14.0",
       "signingIdentity": "-"
     }
   }
