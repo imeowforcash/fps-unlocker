@@ -22,7 +22,15 @@ Display sync is found by flipping it on a dummy CAMetalLayer and looking at whic
 
 ## Is this bannable?
 
-No. Roblox's anti-cheat doesn't even try to detect this at all, especially on Mac.
+No. Roblox's anti-cheat doesn't even try to detect this at all.
+
+## Manual Resign
+
+If for whatever reason the resign button in the app doesn't work, you can run this command in your terminal to manually resign Roblox:
+
+```sh
+curl -fsSL "https://raw.githubusercontent.com/imeowforcash/fps-unlocker/main/resign.sh" | bash
+```
 
 ## Why Tauri?
 
