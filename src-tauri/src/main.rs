@@ -315,14 +315,23 @@ fn roblox() -> Option<i32> {
     .find(|pid| *pid > 0)
 }
 
+fn player() -> Option<PathBuf> {
+    let home = PathBuf::from(std::env::var_os("HOME")?)
+        .join("Applications/Roblox.app/Contents/MacOS/RobloxPlayer");
+    if home.exists() {
+        return Some(home);
+    }
+    let system = PathBuf::from("/Applications/Roblox.app/Contents/MacOS/RobloxPlayer");
+    system.exists().then_some(system)
+}
+
 fn is_resigned() -> bool {
+    let Some(player) = player() else {
+        return false;
+    };
     let Ok(output) = Command::new("/usr/bin/codesign")
-        .args([
-            "-d",
-            "--entitlements",
-            ":-",
-            "/Applications/Roblox.app/Contents/MacOS/RobloxPlayer",
-        ])
+        .args(["-d", "--entitlements", ":-"])
+        .arg(player)
         .output()
     else {
         return false;
@@ -353,10 +362,11 @@ fn resign() -> Result<(), String> {
 <plist version="1.0"><dict><key>com.apple.security.get-task-allow</key><true/></dict></plist>"#,
     )
     .map_err(|e| e.to_string())?;
+    let player = player().ok_or_else(|| "Roblox is not installed.".to_owned())?;
     let out = Command::new("/usr/bin/codesign")
         .args(["--force", "--sign", "-", "--entitlements"])
         .arg(&path)
-        .arg("/Applications/Roblox.app/Contents/MacOS/RobloxPlayer")
+        .arg(player)
         .output()
         .map_err(|e| e.to_string())?;
     let _ = fs::remove_file(path);

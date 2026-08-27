@@ -1,6 +1,13 @@
 #!/bin/bash
 
-PLAYER="/Applications/Roblox.app/Contents/MacOS/RobloxPlayer"
+if [ -x "$HOME/Applications/Roblox.app/Contents/MacOS/RobloxPlayer" ]; then
+  APP="$HOME/Applications/Roblox.app"
+elif [ -x "/Applications/Roblox.app/Contents/MacOS/RobloxPlayer" ]; then
+  APP="/Applications/Roblox.app"
+else
+  APP=""
+fi
+PLAYER="$APP/Contents/MacOS/RobloxPlayer"
 PLIST="/tmp/fps-unlocker-resign.plist"
 LOG="/tmp/fps-unlocker-resign.log"
 
@@ -16,7 +23,7 @@ fail() {
   exit 1
 }
 
-[ -x "$PLAYER" ] || fail "Roblox is not installed."
+[ -n "$APP" ] || fail "Roblox is not installed."
 
 echo "Resigning Roblox requires administrator privileges. Please enter the password you use to log into your Mac."
 sudo -v || fail "authentication failed"
@@ -34,7 +41,7 @@ cat > "$PLIST" <<'PLIST'
 <plist version="1.0"><dict><key>com.apple.security.get-task-allow</key><true/></dict></plist>
 PLIST
 
-sudo -n xattr -cr /Applications/Roblox.app
+sudo -n xattr -cr "$APP"
 sudo -n /usr/bin/codesign --force --sign - --entitlements "$PLIST" "$PLAYER" || fail "couldnt sign roblox"
 
 entitlements=$(/usr/bin/codesign -d --entitlements :- "$PLAYER" 2>&1) || fail "couldnt read entitlments"
