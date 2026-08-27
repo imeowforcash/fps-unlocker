@@ -1,6 +1,6 @@
 [package]
 name = "fps-unlocker"
-version = "0.1.1"
+version = "0.1.2"
 description = "A macOS menu bar app that unlocks the Roblox frame rate"
 authors = ["Saba"]
 edition = "2021"
